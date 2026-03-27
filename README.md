@@ -1,6 +1,6 @@
 # 🔮 Customer 360° Intelligence Dashboard
 
-A full-featured, zero-dependency **Customer Intelligence Dashboard** that generates **10,000 US-based customer profiles** on the fly and provides a unified 360° view across **50 vendors** and **10 categories** — with a built-in **natural-language Q&A engine**.
+A full-featured **Customer Intelligence Dashboard** that procedurally generates **10,000 US-based customer profiles** on the fly and provides a unified 360° view across **50 vendors** and **10 categories** — featuring a built-in **Retrieval-Augmented Generation (RAG)** Q&A engine powered by a **Local Large Language Model (LLM)** for deep semantic analysis.
 
 ![Dashboard Overview](screenshots/overview.png)
 
@@ -33,8 +33,13 @@ A full-featured, zero-dependency **Customer Intelligence Dashboard** that genera
 | **Vendor Relationships** | All vendor cards grouped by category with status indicators |
 | **Lifetime Value** | Total spend, average monthly spend, disputes filed, customer tenure, active vs total accounts |
 
-### 🤖 Q&A Engine (Natural Language)
-Ask questions in plain English and get instant answers with formatted tables and clickable profile links.
+### 🤖 Q&A Engine (Local RAG + LLM)
+Ask complex questions in plain English and get instant answers with formatted tables and clickable profile links.
+
+The natural language processing is handled natively on your machine using a fully custom **Retrieval-Augmented Generation (RAG)** pipeline:
+1. **Embedding generation:** Your query is vectorized via `all-MiniLM-L6-v2`.
+2. **Dense Search:** An ultra-fast `Numpy` dot-product search scans 10,000 serialized risk profiles in milliseconds to retrieve top matches.
+3. **LLM Synthesis:** The context is streamed to a local inference engine (like Ollama running `qwen2.5-coder:7b`) to synthesize an analytical response without ever uploading private financial data to the cloud.
 
 **Supported query types:**
 
@@ -171,7 +176,7 @@ Customer
 
 ## 🏗️ Production Architecture Recommendation
 
-For a production deployment with real data, the recommended architecture:
+For an enterprise deployment with streaming data, the recommended RAG architecture:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -182,20 +187,25 @@ For a production deployment with real data, the recommended architecture:
          ┌─────────▼──────────┐
          │  Unified REST API   │
          │  (Federation Layer) │
-         └─────────┬──────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-┌───▼───┐    ┌────▼────┐   ┌────▼────┐
-│Cat 1-3│    │Cat 4-6  │   │Cat 7-10 │
-│Stores │    │Stores   │   │Stores   │
-└───────┘    └─────────┘   └─────────┘
+         └─────────┬─────────┬┘
+                   │         │
+    ┌──────────────┼───┐  ┌──┴─────────────┐
+    │              │   │  │ NLP & AI Layer │
+┌───▼───┐    ┌────▼─┐  │  ├────────────────┤
+│Cat 1-3│    │Cat 4+│  │  │ Enterprise LLM │
+│Stores │    │Stores│  │  │ Vector DB Store│
+└───────┘    └──────┘  │  └────────────────┘
+                       │
+             ┌─────────▼──────────┐
+             │  Data Lake (HDFS)  │
+             └────────────────────┘
 ```
 
 - **Join key:** `user_id` or email across all vendor datastores
-- **Data lake:** Databricks / BigQuery for scheduled ingestion
+- **Data lake:** Databricks / Snowflake for scheduled ingestion and embedding generation
 - **API layer:** Federated queries across category datastores in real-time
-- **Caching:** Redis for hot customer lookups
+- **Vector DB:** ChromaDB or Milvus for large-scale semantic sub-second retrieval
+- **LLM Synthesis:** Private on-prem deployment of Llama 3 or hosted Azure OpenAI
 
 ---
 
