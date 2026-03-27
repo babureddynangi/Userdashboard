@@ -48,10 +48,14 @@ def query_ollama(prompt: str) -> str:
         "stream": False
     }
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=25)
         response.raise_for_status()
         result = response.json()
         return result.get("response", "")
+    except requests.exceptions.ConnectionError:
+        return "⚠️ Could not connect to Ollama. Ensure Ollama is running and qwen2.5-coder:7b is installed locally."
+    except requests.exceptions.Timeout:
+        return "⏳ Ollama generation timed out (CPU inference took >25s). Reducing context window might help."
     except Exception as e:
         print(f"Ollama Error: {e}")
         return f"Warning: Could not connect to local Ollama LLM. Raw context retrieved.\n\nError: {e}"

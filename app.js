@@ -436,7 +436,7 @@
       const res = await fetch("http://127.0.0.1:8001/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, top_k: 8 })
+        body: JSON.stringify({ query: q, top_k: 2 })
       });
       const data = await res.json();
       document.getElementById(thinkingId).remove();
