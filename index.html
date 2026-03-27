@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="360° Customer Intelligence Dashboard — Unified profiles for 10,000 customers across 50 vendors with AI-powered Q&A.">
+  <title>Customer 360° Intelligence Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+</head>
+<body>
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">🔮</div>
+        <div>
+          <div class="logo-text">Customer 360°</div>
+          <div class="logo-sub">Intelligence Dashboard</div>
+        </div>
+      </div>
+
+      <div class="search-container" id="searchContainer">
+        <div class="search-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" class="search-input"
+            placeholder="Search 10,000 customers by name, email, ID, phone, city, state..."
+            autocomplete="off">
+        </div>
+        <div class="search-dropdown" id="searchDropdown"></div>
+      </div>
+
+      <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+          <div class="stat-value" id="statCustomers">—</div>
+          <div class="stat-label">Customers</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="statVendors">50</div>
+          <div class="stat-label">Vendors</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="statAccounts">—</div>
+          <div class="stat-label">Accounts</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="statExposure">—</div>
+          <div class="stat-label">Exposure</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════ MAIN CONTENT ═══════════ -->
+  <main class="main" id="mainContent">
+
+    <!-- Overview Dashboard (default view) -->
+    <div id="overviewDashboard">
+
+      <!-- KPI Row -->
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <!-- Overview Grid -->
+      <div class="grid-2" id="overviewGrid" style="margin-top:20px;">
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">📊</span> Risk Distribution</div>
+          <div id="riskDistChart"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">🗺️</span> Top States by Customers</div>
+          <div id="stateChart"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">💳</span> Top Vendors by Accounts</div>
+          <div id="vendorChart"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="card-title-icon">📈</span> KYC Status Breakdown</div>
+          <div id="kycChart"></div>
+        </div>
+      </div>
+
+      <!-- Recent High-Risk Customers -->
+      <div class="card" style="margin-top:20px;">
+        <div class="card-title"><span class="card-title-icon">🚨</span> Highest Risk Customers</div>
+        <div class="overflow-x" id="highRiskTable"></div>
+      </div>
+
+    </div>
+
+    <!-- Profile Container (hidden until selected) -->
+    <div class="profile-container" id="profileContainer">
+
+      <button class="back-btn" id="backBtn" onclick="window._showOverview()">← Back to Dashboard</button>
+
+      <div class="profile-header" id="profileHeader"></div>
+
+      <div class="grid-3" id="row1">
+        <div class="card" id="cardIdentity">
+          <div class="card-title"><span class="card-title-icon">🪪</span> Identity & KYC</div>
+          <div class="info-grid" id="identityGrid"></div>
+        </div>
+        <div class="card" id="cardFinancial">
+          <div class="card-title"><span class="card-title-icon">💰</span> Financial Summary</div>
+          <div id="financialContent"></div>
+        </div>
+        <div class="card" id="cardRisk">
+          <div class="card-title"><span class="card-title-icon">⚠️</span> Risk Profile</div>
+          <div id="riskContent"></div>
+        </div>
+      </div>
+
+      <div class="card" id="cardAccounts" style="margin-bottom:20px;">
+        <div class="card-title"><span class="card-title-icon">💳</span> All Accounts <span id="accountCount" style="margin-left:auto;color:var(--text-accent);font-family:'JetBrains Mono',monospace;font-size:0.8rem;"></span></div>
+        <div class="overflow-x" id="accountsContent"></div>
+      </div>
+
+      <div class="card" id="cardPayments" style="margin-bottom:20px;">
+        <div class="card-title"><span class="card-title-icon">📊</span> Payment History — 12 Months</div>
+        <div id="paymentsContent"></div>
+      </div>
+
+      <div class="grid-3" id="row4">
+        <div class="card" id="cardTimeline">
+          <div class="card-title"><span class="card-title-icon">📋</span> Activity Timeline</div>
+          <div id="timelineContent"></div>
+        </div>
+        <div class="card" id="cardVendors">
+          <div class="card-title"><span class="card-title-icon">🏢</span> Active Vendors</div>
+          <div id="vendorsContent"></div>
+        </div>
+        <div class="card" id="cardLTV">
+          <div class="card-title"><span class="card-title-icon">💎</span> Lifetime Value</div>
+          <div id="ltvContent"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ═══════════ Q&A PANEL ═══════════ -->
+  <div class="qa-toggle" id="qaToggle" onclick="window._toggleQA()">
+    <span>🤖</span>
+    <span class="qa-toggle-label">Ask AI</span>
+  </div>
+
+  <div class="qa-panel" id="qaPanel">
+    <div class="qa-header">
+      <span>🤖 Customer Intelligence Q&A</span>
+      <button class="qa-close" onclick="window._toggleQA()">✕</button>
+    </div>
+    <div class="qa-messages" id="qaMessages">
+      <div class="qa-msg qa-bot">
+        <div class="qa-msg-content">
+          Hi! I can answer questions about your 10,000 customer portfolio. Try asking:
+          <ul style="margin:8px 0 0 16px;font-size:0.78rem;line-height:1.8;">
+            <li>"How many high risk customers?"</li>
+            <li>"What's the total exposure?"</li>
+            <li>"Top 10 customers by spend"</li>
+            <li>"Show defaulted accounts"</li>
+            <li>"Average credit score"</li>
+            <li>"Customers in California"</li>
+            <li>"Who has the highest utilization?"</li>
+            <li>"Risk breakdown by state"</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="qa-input-row">
+      <input type="text" id="qaInput" class="qa-input" placeholder="Ask a question about your customers..." autocomplete="off">
+      <button class="qa-send" id="qaSend" onclick="window._askQuestion()">→</button>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
