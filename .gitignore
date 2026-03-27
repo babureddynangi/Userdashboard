@@ -1,0 +1,19 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Data & Embeddings
+backend/customers.json
+backend/documents.json
+backend/embeddings.npy
+
+# OS
+.DS_Store
+Thumbs.db

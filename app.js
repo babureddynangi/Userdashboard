@@ -415,7 +415,7 @@
     });
   }
 
-  window._askQuestion = function () {
+  window._askQuestion = async function () {
     const input = document.getElementById('qaInput');
     const q = input.value.trim();
     if (!q) return;
@@ -423,11 +423,35 @@
 
     addQAMsg(q, 'user');
 
-    // Process with slight delay for UX
-    setTimeout(() => {
-      const answer = processQuestion(q);
-      addQAMsg(answer, 'bot');
-    }, 200);
+    const thinkingId = 'qa-think-' + Date.now();
+    const container = document.getElementById('qaMessages');
+    const div = document.createElement('div');
+    div.id = thinkingId;
+    div.className = 'qa-msg qa-bot';
+    div.innerHTML = `<div class="qa-msg-content" style="color:var(--text-muted);font-style:italic;">Querying RAG Engine...</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+
+    try {
+      const res = await fetch("http://127.0.0.1:8001/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, top_k: 8 })
+      });
+      const data = await res.json();
+      document.getElementById(thinkingId).remove();
+
+      if (data.answer) {
+        let formatted = data.answer.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formatted = formatted.replace(/\n/g, '<br/>');
+        addQAMsg(formatted, 'bot');
+      } else {
+        addQAMsg(`<strong style="color:var(--risk-high)">Error:</strong> ${data.detail || 'Server error'}`, 'bot');
+      }
+    } catch (err) {
+      document.getElementById(thinkingId).remove();
+      addQAMsg(`<strong style="color:var(--risk-high)">Error:</strong> Could not connect to backend. Ensure FastAPI is running on port 8001.`, 'bot');
+    }
   };
 
   function addQAMsg(content, role) {
@@ -437,360 +461,6 @@
     div.innerHTML = `<div class="qa-msg-content">${content}</div>`;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
-  }
-
-  function processQuestion(q) {
-    const ql = q.toLowerCase();
-
-    // ─── Count queries ───
-    if (/how many|count|total number/i.test(ql)) {
-      if (/high.?risk/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.risk.tier === 'high').length;
-        return `There are <strong>${n.toLocaleString()}</strong> high-risk customers (risk score ≥ 70) in the portfolio.`;
-      }
-      if (/low.?risk/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.risk.tier === 'low').length;
-        return `There are <strong>${n.toLocaleString()}</strong> low-risk customers (risk score < 40).`;
-      }
-      if (/moderate|medium/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.risk.tier === 'moderate').length;
-        return `There are <strong>${n.toLocaleString()}</strong> moderate-risk customers (risk score 40–69).`;
-      }
-      if (/default/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.risk.defaults > 0).length;
-        const total = CUSTOMERS.reduce((s, c) => s + c.risk.defaults, 0);
-        return `<strong>${n.toLocaleString()}</strong> customers have at least one default, with <strong>${total.toLocaleString()}</strong> total defaults across the portfolio.`;
-      }
-      if (/customer/i.test(ql)) {
-        return `The portfolio contains <strong>${CUSTOMERS.length.toLocaleString()}</strong> customers across <strong>50</strong> vendors.`;
-      }
-      if (/account/i.test(ql)) {
-        const n = CUSTOMERS.reduce((s, c) => s + c.accounts.length, 0);
-        return `There are <strong>${n.toLocaleString()}</strong> total accounts across all customers.`;
-      }
-      if (/vendor/i.test(ql)) {
-        return `There are <strong>50</strong> vendors across <strong>10</strong> categories: Premium Cards, Travel, Retail, Fuel, Airlines, Hotels, Telecom, Grocery, Insurance, and Entertainment.`;
-      }
-      if (/expired|kyc.?expired/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.kycStatus === 'expired').length;
-        return `<strong>${n.toLocaleString()}</strong> customers have expired KYC status and need re-verification.`;
-      }
-      if (/verified|kyc.?verified/i.test(ql)) {
-        const n = CUSTOMERS.filter(c => c.kycStatus === 'verified').length;
-        return `<strong>${n.toLocaleString()}</strong> customers have verified KYC status.`;
-      }
-      // State-based count
-      const stateMatch = ql.match(/in\s+(\w[\w\s]*?)(?:\?|$)/i);
-      if (stateMatch) {
-        return handleStateQuery(stateMatch[1].trim());
-      }
-    }
-
-    // ─── Total / sum queries ───
-    if (/total\s*(outstanding|exposure|balance)/i.test(ql)) {
-      const total = CUSTOMERS.reduce((s, c) => s + c.financial.totalOutstanding, 0);
-      return `Total outstanding exposure: <strong>${formatCurrency(total)}</strong> across ${CUSTOMERS.length.toLocaleString()} customers.`;
-    }
-    if (/total\s*spend/i.test(ql)) {
-      const total = CUSTOMERS.reduce((s, c) => s + c.financial.totalSpend, 0);
-      return `Total lifetime spend: <strong>${formatCurrency(total)}</strong>.`;
-    }
-    if (/total\s*(credit\s*)?limit/i.test(ql)) {
-      const total = CUSTOMERS.reduce((s, c) => s + c.financial.creditLimit, 0);
-      return `Total credit limit across the portfolio: <strong>${formatCurrency(total)}</strong>.`;
-    }
-
-    // ─── Average queries ───
-    if (/average|avg|mean/i.test(ql)) {
-      if (/risk\s*score/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.risk.score, 0) / CUSTOMERS.length;
-        return `Average risk score: <strong>${avg.toFixed(1)}</strong> out of 100.`;
-      }
-      if (/credit\s*score|bureau\s*score|fico/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.risk.creditBureauScore, 0) / CUSTOMERS.length;
-        return `Average credit bureau score: <strong>${avg.toFixed(0)}</strong>.`;
-      }
-      if (/utilization/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.financial.utilizationRate, 0) / CUSTOMERS.length;
-        return `Average credit utilization: <strong>${avg.toFixed(1)}%</strong>.`;
-      }
-      if (/outstanding|balance/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.financial.totalOutstanding, 0) / CUSTOMERS.length;
-        return `Average outstanding balance per customer: <strong>${formatCurrency(Math.round(avg))}</strong>.`;
-      }
-      if (/spend/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.financial.totalSpend, 0) / CUSTOMERS.length;
-        return `Average total spend per customer: <strong>${formatCurrency(Math.round(avg))}</strong>.`;
-      }
-      if (/age/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + calculateAge(c.dob), 0) / CUSTOMERS.length;
-        return `Average customer age: <strong>${avg.toFixed(1)} years</strong>.`;
-      }
-      if (/account/i.test(ql)) {
-        const avg = CUSTOMERS.reduce((s, c) => s + c.accounts.length, 0) / CUSTOMERS.length;
-        return `Average accounts per customer: <strong>${avg.toFixed(1)}</strong>.`;
-      }
-    }
-
-    // ─── Top/Bottom N queries ───
-    const topMatch = ql.match(/(top|bottom|highest|lowest|best|worst)\s*(\d+)?\s*(customer|client|user)?s?\s*(by\s+)?(spend|outstanding|balance|risk|utilization|credit.?score|bureau|default|late|dispute|account|limit)/i);
-    if (topMatch) {
-      const dir = /top|highest|worst/i.test(topMatch[1]) ? 'desc' : 'asc';
-      const n = parseInt(topMatch[2]) || 10;
-      const metric = topMatch[5].toLowerCase();
-      return handleTopN(n, metric, dir);
-    }
-
-    // ─── "show" queries ───
-    if (/show|list|find|get/i.test(ql)) {
-      if (/default/i.test(ql)) {
-        const defaulted = CUSTOMERS.filter(c => c.risk.defaults > 0).sort((a, b) => b.risk.defaults - a.risk.defaults).slice(0, 15);
-        return makeTable(defaulted, ['name', 'id', 'state', 'defaults', 'outstanding', 'riskScore'], `${CUSTOMERS.filter(c => c.risk.defaults > 0).length} customers with defaults (showing top 15):`);
-      }
-      if (/expired/i.test(ql)) {
-        const expired = CUSTOMERS.filter(c => c.kycStatus === 'expired').slice(0, 15);
-        const totalExpired = CUSTOMERS.filter(c => c.kycStatus === 'expired').length;
-        return makeTable(expired, ['name', 'id', 'state', 'riskTier', 'outstanding'], `${totalExpired} customers with expired KYC (showing 15):`);
-      }
-      if (/high.?risk/i.test(ql)) {
-        const hr = CUSTOMERS.filter(c => c.risk.tier === 'high').sort((a, b) => b.risk.score - a.risk.score).slice(0, 15);
-        return makeTable(hr, ['name', 'id', 'state', 'riskScore', 'bureau', 'outstanding'], `Showing top 15 high-risk customers:`);
-      }
-    }
-
-    // ─── State queries ───
-    if (/customers?\s+in\s+/i.test(ql) || /in\s+(california|new york|texas|florida|illinois|ohio|georgia|michigan|arizona|colorado|washington|virginia|massachusetts|pennsylvania|north carolina|new jersey|tennessee|indiana|maryland|missouri)\b/i.test(ql)) {
-      const stateMatch2 = ql.match(/in\s+(\w[\w\s]*?)(?:\?|$|\s+(?:with|who|that|and))/i) || ql.match(/in\s+(\w[\w\s]*?)$/i);
-      if (stateMatch2) return handleStateQuery(stateMatch2[1].trim());
-    }
-
-    // ─── State abbreviation ───
-    const abbrMatch = ql.match(/\b(CA|NY|TX|FL|IL|PA|OH|GA|NC|MI|NJ|VA|WA|AZ|MA|TN|IN|MO|MD|CO)\b/i);
-    if (abbrMatch && /customer|how many|count|risk/i.test(ql)) {
-      return handleStateQuery(abbrMatch[1].toUpperCase());
-    }
-
-    // ─── Risk breakdown ───
-    if (/risk\s*(breakdown|distribution|split)/i.test(ql)) {
-      if (/state/i.test(ql)) {
-        return handleRiskByState();
-      }
-      const low = CUSTOMERS.filter(c => c.risk.tier === 'low').length;
-      const mod = CUSTOMERS.filter(c => c.risk.tier === 'moderate').length;
-      const high = CUSTOMERS.filter(c => c.risk.tier === 'high').length;
-      return `<strong>Risk Distribution:</strong><br>
-        🟢 Low (0–39): <strong>${low.toLocaleString()}</strong> (${(low/CUSTOMERS.length*100).toFixed(1)}%)<br>
-        🟡 Moderate (40–69): <strong>${mod.toLocaleString()}</strong> (${(mod/CUSTOMERS.length*100).toFixed(1)}%)<br>
-        🔴 High (70–100): <strong>${high.toLocaleString()}</strong> (${(high/CUSTOMERS.length*100).toFixed(1)}%)`;
-    }
-
-    // ─── Specific customer lookup ───
-    if (/^(cust-?\d+)$/i.test(ql.trim())) {
-      const custId = ql.trim().toUpperCase().replace(/^CUST(\d)/, 'CUST-$1');
-      const c = CUSTOMER_BY_ID[custId];
-      if (c) return `<strong>${c.name}</strong> (${c.id})<br>📍 ${c.city}, ${c.state}<br>⚠️ Risk: ${c.risk.score}/100 (${c.risk.tier})<br>💰 Outstanding: ${formatCurrency(c.financial.totalOutstanding)}<br>📊 Utilization: ${c.financial.utilizationRate}%<br><br><span class="qa-link" onclick="window._selectCustomer('${c.id}');window._toggleQA();">View Full Profile →</span>`;
-      return `No customer found with ID "${custId}".`;
-    }
-
-    // ─── Name lookup ───
-    const nameMatches = CUSTOMERS.filter(c => c.name.toLowerCase().includes(ql.replace(/who is|find|look up|search for|show me/gi, '').trim()));
-    if (nameMatches.length > 0 && nameMatches.length <= 10) {
-      if (nameMatches.length === 1) {
-        const c = nameMatches[0];
-        return `<strong>${c.name}</strong> (${c.id})<br>📍 ${c.city}, ${c.state}<br>⚠️ Risk: ${c.risk.score}/100 (${c.risk.tier})<br>💰 Outstanding: ${formatCurrency(c.financial.totalOutstanding)}<br>📊 Utilization: ${c.financial.utilizationRate}%<br>🏦 Bureau Score: ${c.risk.creditBureauScore}<br><br><span class="qa-link" onclick="window._selectCustomer('${c.id}');window._toggleQA();">View Full Profile →</span>`;
-      }
-      return makeTable(nameMatches.slice(0, 10), ['name', 'id', 'state', 'riskTier', 'outstanding'], `Found ${nameMatches.length} matching customers:`);
-    }
-
-    // ─── Vendor queries ───
-    if (/vendor|card|account/i.test(ql)) {
-      const vendorMatch = VENDORS.find(v => ql.includes(v.name.toLowerCase()));
-      if (vendorMatch) {
-        const custs = CUSTOMERS.filter(c => c.accounts.some(a => a.vendorId === vendorMatch.id));
-        const active = custs.filter(c => c.accounts.some(a => a.vendorId === vendorMatch.id && a.status === 'active')).length;
-        const defaulted = custs.filter(c => c.accounts.some(a => a.vendorId === vendorMatch.id && a.status === 'defaulted')).length;
-        const totalBal = custs.reduce((s, c) => s + c.accounts.filter(a => a.vendorId === vendorMatch.id).reduce((s2, a) => s2 + a.balance, 0), 0);
-        return `<strong>${vendorMatch.logo} ${vendorMatch.name}</strong><br>
-          👥 Total customers: <strong>${custs.length.toLocaleString()}</strong><br>
-          ✅ Active: <strong>${active.toLocaleString()}</strong><br>
-          🔴 Defaulted: <strong>${defaulted}</strong><br>
-          💰 Total balance: <strong>${formatCurrency(totalBal)}</strong>`;
-      }
-    }
-
-    // ─── Utilization queries ───
-    if (/utilization\s*(>|above|over|greater)\s*(\d+)/i.test(ql)) {
-      const uMatch = ql.match(/(\d+)/);
-      const threshold = parseInt(uMatch[1]);
-      const custs = CUSTOMERS.filter(c => c.financial.utilizationRate > threshold);
-      return `<strong>${custs.length.toLocaleString()}</strong> customers have utilization above ${threshold}%.` +
-        (custs.length <= 15 ? '<br><br>' + makeTable(custs.sort((a, b) => b.financial.utilizationRate - a.financial.utilizationRate).slice(0, 15), ['name', 'id', 'utilization', 'outstanding', 'riskTier']) : '');
-    }
-
-    // ─── KYC queries ───
-    if (/kyc/i.test(ql)) {
-      const v = CUSTOMERS.filter(c => c.kycStatus === 'verified').length;
-      const e = CUSTOMERS.filter(c => c.kycStatus === 'expired').length;
-      const p = CUSTOMERS.filter(c => c.kycStatus === 'pending_update').length;
-      return `<strong>KYC Status Breakdown:</strong><br>
-        ✅ Verified: <strong>${v.toLocaleString()}</strong> (${(v/CUSTOMERS.length*100).toFixed(1)}%)<br>
-        ⏳ Pending Update: <strong>${p.toLocaleString()}</strong> (${(p/CUSTOMERS.length*100).toFixed(1)}%)<br>
-        ❌ Expired: <strong>${e.toLocaleString()}</strong> (${(e/CUSTOMERS.length*100).toFixed(1)}%)`;
-    }
-
-    // ─── Category queries ───
-    const catMatch = CATEGORIES.find(cat => ql.includes(cat.name.toLowerCase()) || ql.includes(cat.id));
-    if (catMatch) {
-      const catVendors = VENDORS.filter(v => v.category === catMatch.id);
-      const totalAccts = CUSTOMERS.reduce((s, c) => s + c.accounts.filter(a => catVendors.some(v => v.id === a.vendorId)).length, 0);
-      const totalBal = CUSTOMERS.reduce((s, c) => s + c.accounts.filter(a => catVendors.some(v => v.id === a.vendorId)).reduce((s2, a) => s2 + a.balance, 0), 0);
-      return `<strong>${catMatch.icon} ${catMatch.name} Category</strong><br>
-        🏢 Vendors: ${catVendors.map(v => v.name).join(', ')}<br>
-        📊 Total accounts: <strong>${totalAccts.toLocaleString()}</strong><br>
-        💰 Total balance: <strong>${formatCurrency(totalBal)}</strong>`;
-    }
-
-    // ─── Portfolio summary ───
-    if (/summary|overview|portfolio|dashboard/i.test(ql)) {
-      const totalOut = CUSTOMERS.reduce((s, c) => s + c.financial.totalOutstanding, 0);
-      const totalLimit = CUSTOMERS.reduce((s, c) => s + c.financial.creditLimit, 0);
-      const avgRisk = CUSTOMERS.reduce((s, c) => s + c.risk.score, 0) / CUSTOMERS.length;
-      const avgBureau = CUSTOMERS.reduce((s, c) => s + c.risk.creditBureauScore, 0) / CUSTOMERS.length;
-      return `<strong>📋 Portfolio Summary</strong><br>
-        👥 Customers: <strong>${CUSTOMERS.length.toLocaleString()}</strong><br>
-        💰 Total Outstanding: <strong>${formatCurrency(totalOut)}</strong><br>
-        🏦 Total Credit Limit: <strong>${formatCurrency(totalLimit)}</strong><br>
-        📊 Avg Utilization: <strong>${(totalOut/totalLimit*100).toFixed(1)}%</strong><br>
-        ⚠️ Avg Risk Score: <strong>${avgRisk.toFixed(1)}</strong><br>
-        🏦 Avg Bureau Score: <strong>${avgBureau.toFixed(0)}</strong><br>
-        🔴 Total Defaults: <strong>${CUSTOMERS.reduce((s, c) => s + c.risk.defaults, 0).toLocaleString()}</strong><br>
-        📍 States Covered: <strong>${new Set(CUSTOMERS.map(c => c.state)).size}</strong>`;
-    }
-
-    // ─── Fallback ───
-    return `I understand you're asking: "<em>${q}</em>". Here are some queries I can help with:<br><br>
-    <strong>Counts:</strong> "How many high risk customers?", "Count defaults"<br>
-    <strong>Totals:</strong> "Total outstanding", "Total spend"<br>
-    <strong>Averages:</strong> "Average credit score", "Avg utilization"<br>
-    <strong>Rankings:</strong> "Top 10 by spend", "Bottom 5 by bureau score"<br>
-    <strong>Filters:</strong> "Show defaulted accounts", "Customers in California"<br>
-    <strong>Analysis:</strong> "Risk breakdown", "Risk breakdown by state", "KYC status"<br>
-    <strong>Lookups:</strong> "CUST-00042", customer name, vendor name<br>
-    <strong>Summary:</strong> "Portfolio summary"`;
-  }
-
-  // ── Q&A Helpers ──
-  function handleStateQuery(stateInput) {
-    const sl = stateInput.toLowerCase();
-    const st = US_STATES ? US_STATES.find(s => s.name.toLowerCase() === sl || s.abbr.toLowerCase() === sl) : null;
-    if (!st) {
-      // Try matching against customer states
-      const matchedCustomers = CUSTOMERS.filter(c => c.state.toLowerCase() === sl || c.stateName.toLowerCase() === sl);
-      if (matchedCustomers.length > 0) {
-        const low = matchedCustomers.filter(c => c.risk.tier === 'low').length;
-        const mod = matchedCustomers.filter(c => c.risk.tier === 'moderate').length;
-        const high = matchedCustomers.filter(c => c.risk.tier === 'high').length;
-        return `Found <strong>${matchedCustomers.length.toLocaleString()}</strong> customers in ${stateInput}:<br>
-          🟢 Low Risk: ${low} · 🟡 Moderate: ${mod} · 🔴 High: ${high}`;
-      }
-      return `Could not find state "${stateInput}". Try using full state name (e.g., "California") or abbreviation (e.g., "CA").`;
-    }
-    const custs = CUSTOMERS.filter(c => c.state === st.abbr);
-    const low = custs.filter(c => c.risk.tier === 'low').length;
-    const mod = custs.filter(c => c.risk.tier === 'moderate').length;
-    const high = custs.filter(c => c.risk.tier === 'high').length;
-    const totalOut = custs.reduce((s, c) => s + c.financial.totalOutstanding, 0);
-    return `<strong>📍 ${st.name} (${st.abbr})</strong><br>
-      👥 Customers: <strong>${custs.length.toLocaleString()}</strong><br>
-      🟢 Low Risk: ${low} · 🟡 Moderate: ${mod} · 🔴 High: ${high}<br>
-      💰 Total Outstanding: <strong>${formatCurrency(totalOut)}</strong>`;
-  }
-
-  function handleRiskByState() {
-    const states = {};
-    CUSTOMERS.forEach(c => {
-      if (!states[c.state]) states[c.state] = { low: 0, mod: 0, high: 0, total: 0 };
-      states[c.state][c.risk.tier === 'low' ? 'low' : c.risk.tier === 'moderate' ? 'mod' : 'high']++;
-      states[c.state].total++;
-    });
-    const sorted = Object.entries(states).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
-    let html = '<table class="qa-table"><thead><tr><th>State</th><th>Total</th><th>🟢 Low</th><th>🟡 Mod</th><th>🔴 High</th></tr></thead><tbody>';
-    sorted.forEach(([st, d]) => {
-      html += `<tr><td>${st}</td><td>${d.total}</td><td>${d.low}</td><td>${d.mod}</td><td>${d.high}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    return '<strong>Risk Breakdown by State (Top 10):</strong>' + html;
-  }
-
-  function handleTopN(n, metric, dir) {
-    let sorted, col;
-    n = Math.min(n, 20);
-    switch (true) {
-      case /spend/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.financial.totalSpend - a.financial.totalSpend : a.financial.totalSpend - b.financial.totalSpend);
-        col = ['name', 'id', 'state', 'totalSpend', 'riskTier']; break;
-      case /outstanding|balance/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.financial.totalOutstanding - a.financial.totalOutstanding : a.financial.totalOutstanding - b.financial.totalOutstanding);
-        col = ['name', 'id', 'state', 'outstanding', 'riskTier']; break;
-      case /risk/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.risk.score - a.risk.score : a.risk.score - b.risk.score);
-        col = ['name', 'id', 'state', 'riskScore', 'bureau', 'outstanding']; break;
-      case /utilization/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.financial.utilizationRate - a.financial.utilizationRate : a.financial.utilizationRate - b.financial.utilizationRate);
-        col = ['name', 'id', 'utilization', 'outstanding', 'riskTier']; break;
-      case /credit.?score|bureau|fico/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.risk.creditBureauScore - a.risk.creditBureauScore : a.risk.creditBureauScore - b.risk.creditBureauScore);
-        col = ['name', 'id', 'state', 'bureau', 'riskTier']; break;
-      case /default/i.test(metric):
-        sorted = [...CUSTOMERS].filter(c => c.risk.defaults > 0).sort((a, b) => dir === 'desc' ? b.risk.defaults - a.risk.defaults : a.risk.defaults - b.risk.defaults);
-        col = ['name', 'id', 'state', 'defaults', 'outstanding']; break;
-      case /late/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.risk.latePayments - a.risk.latePayments : a.risk.latePayments - b.risk.latePayments);
-        col = ['name', 'id', 'state', 'latePayments', 'riskTier']; break;
-      case /dispute/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.financial.disputesFiled - a.financial.disputesFiled : a.financial.disputesFiled - b.financial.disputesFiled);
-        col = ['name', 'id', 'state', 'disputes', 'riskTier']; break;
-      case /account/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.accounts.length - a.accounts.length : a.accounts.length - b.accounts.length);
-        col = ['name', 'id', 'state', 'accounts', 'riskTier']; break;
-      case /limit/i.test(metric):
-        sorted = [...CUSTOMERS].sort((a, b) => dir === 'desc' ? b.financial.creditLimit - a.financial.creditLimit : a.financial.creditLimit - b.financial.creditLimit);
-        col = ['name', 'id', 'state', 'creditLimit', 'riskTier']; break;
-      default:
-        return `I'm not sure how to rank by "${metric}". Try: spend, outstanding, risk, utilization, credit score, defaults, late payments, disputes, or accounts.`;
-    }
-    return makeTable(sorted.slice(0, n), col, `${dir === 'desc' ? 'Top' : 'Bottom'} ${n} by ${metric}:`);
-  }
-
-  function makeTable(customers, columns, title) {
-    const colMap = {
-      name: { header: 'Name', fn: c => `<span class="qa-link" onclick="window._selectCustomer('${c.id}');window._toggleQA();">${c.name}</span>` },
-      id: { header: 'ID', fn: c => c.id },
-      state: { header: 'State', fn: c => c.state },
-      riskScore: { header: 'Risk', fn: c => `<span style="color:${c.risk.tier === 'high' ? 'var(--risk-high)' : c.risk.tier === 'moderate' ? 'var(--risk-moderate)' : 'var(--risk-low)'}">${c.risk.score}</span>` },
-      riskTier: { header: 'Tier', fn: c => c.risk.tier },
-      bureau: { header: 'Bureau', fn: c => c.risk.creditBureauScore },
-      outstanding: { header: 'Outstanding', fn: c => formatCurrency(c.financial.totalOutstanding) },
-      totalSpend: { header: 'Total Spend', fn: c => formatCurrency(c.financial.totalSpend) },
-      utilization: { header: 'Util%', fn: c => c.financial.utilizationRate + '%' },
-      defaults: { header: 'Defaults', fn: c => c.risk.defaults },
-      latePayments: { header: 'Late', fn: c => c.risk.latePayments },
-      disputes: { header: 'Disputes', fn: c => c.financial.disputesFiled },
-      accounts: { header: 'Accounts', fn: c => c.accounts.length },
-      creditLimit: { header: 'Credit Limit', fn: c => formatCurrency(c.financial.creditLimit) }
-    };
-
-    let html = title ? `<strong>${title}</strong>` : '';
-    html += '<table class="qa-table"><thead><tr>';
-    columns.forEach(col => { html += `<th>${colMap[col].header}</th>`; });
-    html += '</tr></thead><tbody>';
-    customers.forEach(c => {
-      html += '<tr>';
-      columns.forEach(col => { html += `<td>${colMap[col].fn(c)}</td>`; });
-      html += '</tr>';
-    });
-    html += '</tbody></table>';
-    return html;
   }
 
   // ── Boot ──

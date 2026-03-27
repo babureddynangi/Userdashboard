@@ -56,14 +56,15 @@ Ask questions in plain English and get instant answers with formatted tables and
 
 | Layer | Technology |
 |-------|-----------|
-| **Structure** | HTML5 (semantic, SEO-optimized) |
-| **Styling** | Vanilla CSS — dark glassmorphism, CSS custom properties, responsive grid |
-| **Logic** | Vanilla JavaScript — no frameworks, no dependencies |
-| **Fonts** | [Inter](https://fonts.google.com/specimen/Inter) + [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) via Google Fonts |
-| **Data** | Procedurally generated via seeded PRNG (deterministic, reproducible) |
-| **Server** | Any static file server (Python `http.server`, VS Code Live Server, etc.) |
+| **Frontend Structure** | HTML5 (semantic, SEO-optimized) |
+| **Frontend Styling** | Vanilla CSS — dark glassmorphism, CSS custom properties, responsive grid |
+| **Frontend Logic** | Vanilla JavaScript — procedural generation, animations, fetch API |
+| **Backend API** | Python `FastAPI` (REST API mapped to `/api/chat`) |
+| **RAG Vector Store** | `Numpy` dense arrays (` embeddings.npy`) — fast, RAM-based dot product search |
+| **Embedding Model** | `sentence-transformers/all-MiniLM-L6-v2` |
+| **LLM Inference** | `Ollama` local LLM (e.g., `qwen2.5-coder:7b`) |
 
-**No API keys. No npm. No build step. No backend.**
+**100% Local Execution. Deep Semantic Search. Zero Cloud Dependencies.**
 
 ---
 
@@ -71,11 +72,18 @@ Ask questions in plain English and get instant answers with formatted tables and
 
 ```
 Userdashboard/
-├── index.html      # Main dashboard page
-├── styles.css      # Complete design system (dark theme, glassmorphism, animations)
-├── data.js         # Seeded PRNG generator — 10K customers, 50 vendors, 20 states
-├── app.js          # Dashboard logic, search, profile rendering, Q&A engine
-└── README.md       # This file
+├── index.html          # Main dashboard page
+├── styles.css          # Complete design system (dark theme, glassmorphism, animations)
+├── data.js             # Seeded PRNG generator — 10K customers
+├── app.js              # Dashboard logic, search, profile rendering, RAG fetch
+├── backend/            # RAG Python Backend
+│   ├── requirements.txt
+│   ├── ingest.py       # Embeds 10,000 JSON profiles into Numpy NPY arrays using sentence-transformers
+│   ├── server.py       # FastAPI server providing the /api/chat RAG endpoint connecting to Ollama
+│   ├── customers.json  # Exported 10K raw profiles
+│   ├── documents.json  # Raw text chunks for RAG context bridging
+│   └── embeddings.npy  # Generated 384-dimensional dense vectors
+└── README.md           # This file
 ```
 
 ---
@@ -83,24 +91,33 @@ Userdashboard/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- A modern web browser (Chrome, Firefox, Edge, Safari)
-- Python 3.x (for local server) — or any static file server
+- Python 3.9+
+- A running local instance of [Ollama](https://ollama.ai/) with a model pulled (default: `qwen2.5-coder:7b`)
 
-### Run Locally
+### 1. Setup Backend & RAG Vector Store
 
 ```bash
-# Clone the repository
-git clone https://github.com/babureddynangi/Userdashboard.git
-cd Userdashboard
+cd Userdashboard/backend
+python -m pip install -r requirements.txt
 
-# Start a local server
-python -m http.server 8888
+# Run the ingestion script (takes ~15-20m on CPU for 10,000 customers)
+# This creates the embeddings.npy file
+python ingest.py 
 
-# Open in browser
-# http://localhost:8888
+# Start the FastAPI Server (Port 8001)
+python server.py
 ```
 
-> **Note:** The dashboard generates all 10,000 customer profiles on page load in ~100ms using a seeded pseudo-random number generator. No external data sources needed.
+### 2. Start Frontend
+
+Open a new terminal:
+```bash
+cd Userdashboard
+python -m http.server 8888
+# Open http://localhost:8888
+```
+
+> **Architecture Note:** The dashboard procedurally generates 10,000 profiles via a seeded PRNG on page load. The backend exposes true Semantic Search over these records leveraging locally computed dense vectors and Ollama inference.
 
 ---
 
