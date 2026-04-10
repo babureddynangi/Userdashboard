@@ -5,6 +5,7 @@ import numpy as np
 import json
 import os
 import re
+import zipfile
 from sentence_transformers import SentenceTransformer
 
 app = FastAPI(title="Customer 360 RAG API (Smart Analytics Engine)")
@@ -23,6 +24,7 @@ BASE_DIR = os.path.dirname(__file__)
 EMB_PATH = os.path.join(BASE_DIR, "embeddings.npy")
 DOC_PATH = os.path.join(BASE_DIR, "documents.json")
 CUST_PATH = os.path.join(BASE_DIR, "customers.json")
+ZIP_PATH = os.path.join(BASE_DIR, "customers.zip")
 
 customers = []
 try:
@@ -30,6 +32,13 @@ try:
     doc_embeddings = np.load(EMB_PATH)
     with open(DOC_PATH, "r", encoding="utf-8") as f:
         documents = json.load(f)
+        
+    # Auto-extract zip if the raw json is missing
+    if not os.path.exists(CUST_PATH) and os.path.exists(ZIP_PATH):
+        print("Extracting customers.zip...")
+        with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
+            zip_ref.extractall(BASE_DIR)
+            
     with open(CUST_PATH, "r", encoding="utf-8") as f:
         customers = json.load(f)
     print("Loading Sentence Transformer...")

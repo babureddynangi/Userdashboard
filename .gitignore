@@ -11,8 +11,7 @@ __pycache__/
 
 # Data & Embeddings
 backend/customers.json
-backend/documents.json
-backend/embeddings.npy
+# (documents.json and embeddings.npy are tracked, customers.zip is tracked)
 
 # OS
 .DS_Store
